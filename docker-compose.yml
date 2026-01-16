@@ -1,16 +1,21 @@
 services:
-  web:
-    build: .
+  bp_mon_web:
+    image: ghcr.io/psybernoid/bp_monitor # comment out to build from source
+    #build: . # uncomment to build from source
+    container_name: bp_mon_web
+    restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://user:password@db:5432/bp_db
+      - DATABASE_URL=postgresql://user:password_changeme@bp_mon_db:5432/bp_db # change 'password_changeme' to something secure
     depends_on:
-      db:
+      bp_mon_db:
         condition: service_healthy
 
-  db:
+  bp_mon_db:
     image: postgres:15
+    container_name: bp_mon_db
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d bp_db"]
       interval: 5s
@@ -18,7 +23,7 @@ services:
       retries: 5
     environment:
       - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=password_changeme # change 'password_changeme' to something secure
       - POSTGRES_DB=bp_db
     volumes:
       - ./data:/var/lib/postgresql/data
