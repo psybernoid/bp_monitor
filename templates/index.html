@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BP Health Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        .totals-row { background-color: #f0f0f0; font-weight: bold; border-top: 2px solid #333; }
+        .excluded-row { color: #999; text-decoration: line-through; background-color: #fafafa; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container py-4">
+    <h2 class="mb-4 text-primary">Blood Pressure Log</h2>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="POST">
+                {% if not session.get('user_name') %}
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4"><label class="form-label">Name</label><input type="text" name="name" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">DOB (DD/MM/YYYY)</label><input type="text" name="dob" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">Comment</label><input type="text" name="comment" class="form-control"></div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-secondary d-flex justify-content-between align-items-center">
+                        <span><strong>User:</strong> {{ session.user_name }} | <strong>DOB:</strong> {{ session.user_dob }}</span>
+                        <a href="/reset_user" class="btn btn-sm btn-link">Change Profile</a>
+                    </div>
+                {% endif %}
+
+                <div class="row g-3 mb-3">
+                    <div class="col-3"><label>Sys 1</label><input type="number" name="sys1" class="form-control" required></div>
+                    <div class="col-3"><label>Dia 1</label><input type="number" name="dia1" class="form-control" required></div>
+                    <div class="col-3"><label>Sys 2</label><input type="number" name="sys2" class="form-control" required></div>
+                    <div class="col-3"><label>Dia 2</label><input type="number" name="dia2" class="form-control" required></div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Add Entry</button>
+            </form>
+        </div>
+    </div>
+
+    {% for block in blocks %}
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white d-flex justify-content-between">
+            <span>{{ "7-Day Block" if block.is_complete else "Current Working Block" }}</span>
+            {% if block.is_complete %}<span class="badge bg-success">Complete</span>{% endif %}
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm m-0">
+                <thead>
+                    <tr>
+                        <th>Time</th><th>Sys1</th><th>Dia1</th><th>Sys2</th><th>Dia2</th><th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in block.entries %}
+                    <tr class="{% if block.is_complete and entry.timestamp.strftime('%d/%m/%Y') == block.first_day_excluded %}excluded-row{% endif %}">
+                        <td>{{ entry.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td>{{ entry.systolic1 }}</td><td>{{ entry.diastolic1 }}</td>
+                        <td>{{ entry.systolic2 }}</td><td>{{ entry.diastolic2 }}</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary py-0" onclick="openEdit('{{ entry.id }}','{{ entry.systolic1 }}','{{ entry.diastolic1 }}','{{ entry.systolic2 }}','{{ entry.diastolic2 }}')">Edit</button>
+                            <form action="/delete/{{ entry.id }}" method="POST" class="d-inline" onsubmit="return confirm('Delete?')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger py-0">Del</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if block.is_complete %}
+                    <tr class="totals-row">
+                        <td>Block Totals (Excl. Day 1)</td>
+                        <td>{{ block.totals.sys1 }}</td><td>{{ block.totals.dia1 }}</td>
+                        <td>{{ block.totals.sys2 }}</td><td>{{ block.totals.dia2 }}</td>
+                        <td></td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="card p-3 shadow-sm border-success">
+        <h5>Download Records</h5>
+        <form method="POST" action="/download" class="row g-2 align-items-center">
+            <div class="col-auto">
+                <select name="mode" class="form-select" onchange="document.getElementById('dateRange').classList.toggle('d-none', this.value !== 'range')">
+                    <option value="all">All Records</option>
+                    <option value="range">Date Range</option>
+                </select>
+            </div>
+            <div id="dateRange" class="col-auto d-none">
+                <div class="input-group"><input type="date" name="start_date" class="form-control"><input type="date" name="end_date" class="form-control"></div>
+            </div>
+            <div class="col-auto"><button type="submit" class="btn btn-success">Get CSV</button></div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form id="editForm" method="POST">
+            <div class="modal-content">
+                <div class="modal-header"><h5>Edit Entry</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-6">Sys1<input type="number" name="sys1" id="e_s1" class="form-control"></div>
+                        <div class="col-6">Dia1<input type="number" name="dia1" id="e_d1" class="form-control"></div>
+                        <div class="col-6">Sys2<input type="number" name="sys2" id="e_s2" class="form-control"></div>
+                        <div class="col-6">Dia2<input type="number" name="dia2" id="e_d2" class="form-control"></div>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary">Save Changes</button></div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    const modalObj = new bootstrap.Modal(document.getElementById('editModal'));
+    function openEdit(id, s1, d1, s2, d2) {
+        document.getElementById('editForm').action = '/edit/' + id;
+        document.getElementById('e_s1').value = s1; document.getElementById('e_d1').value = d1;
+        document.getElementById('e_s2').value = s2; document.getElementById('e_d2').value = d2;
+        modalObj.show();
+    }
+</script>
+</body>
+</html>
